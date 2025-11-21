@@ -1,0 +1,16 @@
+# Diretórios de IDEs
+.idea/
+.vscode/
+
+# Arquivos temporários e cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Checkpoints do Jupyter Notebook
+.ipynb_checkpoints/
+
+# Ambientes virtuais (boa prática adicionar também)
+venv/
+env/
+.env
