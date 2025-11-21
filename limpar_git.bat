@@ -22,6 +22,7 @@ echo *$py.class >> .gitignore
 echo .ipynb_checkpoints/ >> .gitignore
 echo venv/ >> .gitignore
 echo .env >> .gitignore
+echo
 
 echo [.gitignore atualizado com sucesso]
 
