@@ -22,4 +22,4 @@ __pycache__/
 *$py.class 
 .ipynb_checkpoints/ 
 venv/ 
-.env 
+.env
