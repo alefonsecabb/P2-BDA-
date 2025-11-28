@@ -1,4 +1,3 @@
-````markdown
 # 🛒 Projeto de Engenharia de Dados: Pipeline ETL & Analytics (Olist)
 
 Este repositório contém um projeto completo de Engenharia de Dados desenvolvido para a disciplina de Banco de Dados Avançado. O objetivo é construir um pipeline ETL (Extract, Transform, Load) que processa dados brutos de E-commerce, normaliza-os em um ambiente OLTP e, posteriormente, modela-os em um Data Warehouse (Star Schema) para análise de BI.
