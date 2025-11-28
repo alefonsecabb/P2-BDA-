@@ -29,7 +29,7 @@ projeto-dw-grupo-A/
 │   ├── connection.py           # Gerenciador de conexão PostgreSQL
 │   ├── graphics.py             # Funções de plotagem
 │   └── util.py                 # Utilitários gerais
-└── views/                      # Pasta de saída para imagens dos gráficos (.png)
+└── visualizations/             # Pasta de saída para imagens dos gráficos (.png)
 ````
 
 -----
