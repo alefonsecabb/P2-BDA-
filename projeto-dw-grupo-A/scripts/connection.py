@@ -2,7 +2,8 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError, ArgumentError
-
+import pandas as pd
+from sqlalchemy import text, inspect
 
 def get_engine():
     """
@@ -89,3 +90,74 @@ def connection_test():
         # mas adicionamos por segurança.
         if connection and hasattr(connection, 'close'):
             connection.close()
+
+def get_schema_metadata(session, schema_name='analytics', csv_output_path='tabelas_colunas.csv'):
+    """
+    Inspeciona o schema do banco de dados para listar tabelas, contar registros 
+    e listar colunas. Retorna um DataFrame e salva um CSV.
+
+    Args:
+        session: Sessão SQLAlchemy ativa (ex: retorno de get_session()).
+        schema_name (str): Nome do schema a ser inspecionado. Padrão: 'analytics'.
+        csv_output_path (str): Caminho para salvar o CSV. Se None, não salva arquivo.
+
+    Returns:
+        pd.DataFrame: DataFrame contendo 'tablename', 'record_count' e 'columns_list'.
+    """
+    dados_tabelas = []
+
+    try:
+        # 1. Busca otimizada dos nomes das tabelas e criação do inspector
+        # Passamos session.bind (a Engine) para o inspect
+        inspector = inspect(session.bind)
+        
+        # Verifica se o schema existe ou tem tabelas
+        tabelas = inspector.get_table_names(schema=schema_name)
+        
+        if not tabelas:
+            print(f"Aviso: Nenhuma tabela encontrada no schema '{schema_name}'.")
+            return pd.DataFrame()
+
+        print(f"Inspecionando {len(tabelas)} tabelas no schema '{schema_name}'...")
+
+        # 2. Itera sobre as tabelas
+        for tabela in tabelas:
+            # 2.1. Obtém a lista de colunas
+            try:
+                colunas_info = inspector.get_columns(tabela, schema=schema_name)
+                # Extrai apenas o nome ('name') de cada coluna
+                lista_colunas = [col['name'] for col in colunas_info]
+            except Exception as e:
+                lista_colunas = f"ERRO INSPECT: {e.__class__.__name__}"
+
+            # 2.2. Obtém a contagem de registros
+            try:
+                sql_count = text(f"SELECT COUNT(*) FROM {schema_name}.{tabela};")
+                # Executa a query
+                count = session.execute(sql_count).scalar_one()
+            except Exception as e:
+                count = f"ERRO COUNT: {e.__class__.__name__}"
+
+            # 2.3. Adiciona os dados à lista
+            dados_tabelas.append({
+                'tablename': tabela,
+                'record_count': count,
+                'columns_list': lista_colunas
+            })
+
+        # 3. Cria o DataFrame
+        df_tabelas = pd.DataFrame(dados_tabelas)
+
+        # 4. Salva em CSV (se um caminho foi fornecido)
+        if csv_output_path:
+            try:
+                df_tabelas.to_csv(csv_output_path, index=False)
+                print(f"Arquivo '{csv_output_path}' salvo com sucesso.")
+            except Exception as e:
+                print(f"Erro ao salvar CSV: {e}")
+
+        return df_tabelas
+
+    except Exception as e:
+        print(f"Erro crítico ao gerar metadados: {e}")
+        return pd.DataFrame()
