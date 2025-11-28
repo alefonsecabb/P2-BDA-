@@ -1,9 +1,12 @@
 #Bibliotecas
 import pandas as pd
 import plotly.express as px
-from sqlalchemy import text
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 import math
+from matplotlib.gridspec import GridSpec
+from pathlib import Path
+from sqlalchemy import text
 
 def gerar_grafico_sql(codigo_sql, coluna_x, coluna_y, rotulo_valor, titulo_grafico, tipo_grafico, nome_arquivo_saida, conexao):
     """
@@ -141,3 +144,86 @@ def plotar_comparacao_produtos(df, arquivo_saida='grafico_comparativo.png'):
     plt.savefig(arquivo_saida)
     plt.show() # Opcional: comentar se for rodar em script sem interface
     print(f"Gráfico salvo com sucesso em: {arquivo_saida}")
+
+
+
+
+
+def gerar_dashboard_consolidado(pasta_origem='visualizations', nome_arquivo_saida='dashboard_final.png'):
+    """
+    Lê imagens PNG de gráficos gerados anteriormente e as consolida em um único 
+    Layout de Dashboard (3 linhas x 2 colunas).
+
+    Args:
+        pasta_origem (str): Nome da pasta onde estão os PNGs (ex: 'visualizations').
+        nome_arquivo_saida (str): Nome do arquivo final a ser salvo.
+    """
+    
+    # Define o caminho base usando Pathlib para compatibilidade de SO
+    base_dir = Path(pasta_origem)
+    output_path = base_dir / nome_arquivo_saida
+
+    # Dicionário mapeando a posição lógica para o nome do arquivo esperado
+    # Certifique-se que estes nomes batem com o que foi gerado nos passos anteriores
+    imagens_map = {
+        "evolucao": "grafico_vendas_mensais.png",
+        "top_itens": "grafico_top10_itens_mais_vendidos.png",
+        "top_clientes": "grafico_top10_clientes.png",
+        "tempo_entrega": "grafico_tempo_medio_atendimento.png",
+        "comparativo": "grafico_melhor-e-pior-desempenho_itens.png"
+    }
+
+    # Configuração da Figura (Canvas)
+    # Height ratios: A última linha é um pouco maior (1.5) para acomodar o gráfico comparativo
+    fig = plt.figure(figsize=(24, 20))
+    gs = GridSpec(3, 2, figure=fig, height_ratios=[1, 1, 1.5]) 
+
+    # Título Geral do Dashboard
+    plt.suptitle("Dashboard Analítico de E-commerce (Olist)", fontsize=26, fontweight='bold', y=0.95)
+
+    # --- Função auxiliar para plotar imagens ---
+    def plotar_imagem(ax_position, key_name, titulo_custom=None):
+        arquivo = base_dir / imagens_map[key_name]
+        if arquivo.exists():
+            img = mpimg.imread(str(arquivo))
+            ax = fig.add_subplot(ax_position)
+            ax.imshow(img)
+            ax.axis('off') # Remove bordas e eixos da imagem
+            if titulo_custom:
+                ax.set_title(titulo_custom, fontsize=16, fontweight='bold')
+        else:
+            print(f"⚠️ Aviso: Imagem não encontrada para compor o dashboard: {arquivo}")
+            # Cria um placeholder vazio para não quebrar o layout
+            ax = fig.add_subplot(ax_position)
+            ax.text(0.5, 0.5, 'Imagem não disponível', ha='center', va='center')
+            ax.axis('off')
+
+    # --- Montagem do Grid ---
+
+    # 1. LINHA SUPERIOR (Inteira): Evolução Temporal
+    plotar_imagem(gs[0, :], "evolucao", "Visão Geral: Evolução de Vendas")
+
+    # 2. LINHA DO MEIO (Esquerda): Top Itens
+    plotar_imagem(gs[1, 0], "top_itens")
+
+    # 3. LINHA DO MEIO (Direita): Top Clientes
+    plotar_imagem(gs[1, 1], "top_clientes")
+
+    # 4. LINHA INFERIOR (Esquerda): Tempo de Entrega
+    plotar_imagem(gs[2, 0], "tempo_entrega")
+
+    # 5. LINHA INFERIOR (Direita): Comparativo Melhor/Pior
+    plotar_imagem(gs[2, 1], "comparativo")
+
+    # Finalização
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Ajusta margens para o suptitle não cortar
+    
+    # Salva o arquivo final
+    try:
+        plt.savefig(output_path, dpi=100, bbox_inches='tight')
+        print(f"✅ Dashboard consolidado salvo com sucesso em: {output_path}")
+    except Exception as e:
+        print(f"❌ Erro ao salvar o dashboard: {e}")
+
+    # Exibe no notebook
+    plt.show()

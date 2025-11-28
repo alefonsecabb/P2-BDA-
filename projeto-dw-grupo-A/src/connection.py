@@ -7,6 +7,8 @@ from pathlib import Path
 import pandas as pd
 import os
 import re
+import csv
+from datetime import date, datetime
 
 def get_engine():
     """
@@ -309,5 +311,69 @@ def execute_query_script(sql_file_path):
     except Exception as e:
         print(f"❌ Erro crítico ao processar o arquivo: {e}")
     
+    finally:
+        session.close()
+
+def generate_python_backup(output_file='backup_dados_analytics.sql'):
+    """
+    Gera um backup SQL (apenas INSERTs) dos dados do schema 'analytics' usando apenas Python/Pandas.
+    Ideal para quando não se tem acesso ao 'pg_dump' local.
+    """
+    print(f"--- 🐍 Iniciando Backup Python (Pure SQL) para '{output_file}' ---")
+    
+    session = get_session()
+    engine = session.bind
+    
+    try:
+        # 1. Identifica as tabelas do schema analytics
+        # A ordem aqui é importante por causa das chaves estrangeiras (Dimensões -> Fato)
+        tables_order = ['dim_customer', 'dim_product', 'dim_seller', 'dim_date', 'fact_sales']
+        
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(f"-- BACKUP GERADO VIA PYTHON EM {datetime.now()}\n")
+            f.write("-- SCHEMA: analytics\n\n")
+            f.write("BEGIN;\n\n")
+
+            for table in tables_order:
+                print(f"Lendo tabela: analytics.{table}...")
+                
+                # Lê os dados para um DataFrame
+                df = pd.read_sql(text(f"SELECT * FROM analytics.{table}"), con=engine)
+                
+                if df.empty:
+                    f.write(f"-- Tabela {table} está vazia.\n\n")
+                    continue
+
+                # Prepara as colunas
+                columns = ", ".join(df.columns)
+                
+                # Gera os INSERTs
+                # Iterar linha a linha é lento para milhões de registros, mas funcional para este projeto.
+                count = 0
+                for index, row in df.iterrows():
+                    values = []
+                    for val in row:
+                        if pd.isna(val):
+                            values.append("NULL")
+                        elif isinstance(val, (str, date, datetime)):
+                            # Escapa aspas simples duplicando-as (ex: O'Brian -> O''Brian)
+                            val_str = str(val).replace("'", "''")
+                            values.append(f"'{val_str}'")
+                        else:
+                            values.append(str(val))
+                    
+                    values_str = ", ".join(values)
+                    sql = f"INSERT INTO analytics.{table} ({columns}) VALUES ({values_str});\n"
+                    f.write(sql)
+                    count += 1
+                
+                print(f"  -> {count} registros escritos para '{table}'.")
+                f.write(f"\n-- Fim da tabela {table}\n\n")
+
+            f.write("COMMIT;\n")
+            print(f"✅ Backup concluído! Arquivo salvo em: {output_file}")
+
+    except Exception as e:
+        print(f"❌ Erro ao gerar backup Python: {e}")
     finally:
         session.close()
