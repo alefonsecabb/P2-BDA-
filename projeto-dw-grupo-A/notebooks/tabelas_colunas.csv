@@ -4,5 +4,5 @@ dim_customer,99441,"['customer_sk', 'customer_id', 'effective_from', 'effective_
 fact_sales,112650,"['sale_sk', 'order_id', 'customer_sk', 'product_sk', 'seller_sk', 'date_sk', 'price', 'freight_value']"
 dim_product,32951,"['product_sk', 'product_id']"
 dim_seller,3095,"['seller_sk', 'seller_id']"
-dim_date,773,"['date_sk', 'full_date', 'year', 'month', 'day']"
+dim_date,774,"['date_sk', 'full_date', 'year', 'month', 'day', 'quarter', 'day_of_week', 'week_of_year']"
 df_items,112650,"['order_id', 'order_item_id', 'product_id', 'seller_id', 'shipping_limit_date', 'price', 'freight_value']"

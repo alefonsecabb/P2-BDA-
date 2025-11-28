@@ -5,20 +5,9 @@ from sqlalchemy import text
 import matplotlib.pyplot as plt
 import math
 
-
 def gerar_grafico_sql(codigo_sql, coluna_x, coluna_y, rotulo_valor, titulo_grafico, tipo_grafico, nome_arquivo_saida, conexao):
     """
-    Executa SQL, processa datas e gera um gráfico (Linha ou Barra) salvando em PNG.
-    
-    Parâmetros:
-      codigo_sql (str): A query SQL.
-      coluna_x (str): Nome da coluna para o eixo X (ex: 'periodo').
-      coluna_y (str): Nome da coluna para o eixo Y (ex: 'sales').
-      rotulo_valor (str): Texto para descrever o valor no eixo Y (ex: 'Total de Vendas (R$)').
-      titulo_grafico (str): Título do gráfico.
-      tipo_grafico (str): 'linhas' ou 'barras'.
-      nome_arquivo_saida (str): Caminho/nome do arquivo .png.
-      conexao (Engine): Objeto de conexão SQLAlchemy (ex: cn.get_engine()).
+    Executa SQL, processa datas e gera um gráfico (Linha ou Barra) com RÓTULOS DE DADOS, salvando em PNG.
     """
     
     try:
@@ -26,7 +15,6 @@ def gerar_grafico_sql(codigo_sql, coluna_x, coluna_y, rotulo_valor, titulo_grafi
         df = pd.read_sql(sql=text(codigo_sql), con=conexao)
         
         # 2. PRÉ-PROCESSAMENTO (Lógica de Data)
-        # Verifica se o eixo X é 'periodo' e se as colunas necessárias existem para criá-lo
         if coluna_x == 'periodo' and 'periodo' not in df.columns:
             if 'year' in df.columns and 'month' in df.columns:
                 df['periodo'] = pd.to_datetime(df[['year', 'month']].assign(day=1))
@@ -41,19 +29,24 @@ def gerar_grafico_sql(codigo_sql, coluna_x, coluna_y, rotulo_valor, titulo_grafi
 
         # 3. PLOTAGEM
         if tipo_grafico.lower() in ['linhas', 'linha', 'line']:
+            # Adicionado parâmetro text=coluna_y
             fig = px.line(df, x=coluna_x, y=coluna_y, title=titulo_grafico, labels=labels_map)
+            
         elif tipo_grafico.lower() in ['barras', 'barra', 'bar']:
-            fig = px.bar(df, x=coluna_x, y=coluna_y, title=titulo_grafico, labels=labels_map)
+            # Adicionado parâmetro text=coluna_y
+            fig = px.bar(df, x=coluna_x, y=coluna_y, title=titulo_grafico, labels=labels_map, text=coluna_y)
+            fig.update_traces(texttemplate='%{text:.2s}', textposition='outside')
+            
         else:
             print(f"Erro: Tipo de gráfico '{tipo_grafico}' não reconhecido.")
             return
-
+        
         # Ajuste específico para datas no eixo X
         if coluna_x == 'periodo':
             fig.update_xaxes(dtick="M1", tickformat="%b\n%Y")
 
         # 4. EXIBE E SALVA
-        fig.show() # Descomente se quiser ver no notebook ao executar
+        fig.show() # Descomente se quiser ver no notebook
         
         try:
             fig.write_image(nome_arquivo_saida)

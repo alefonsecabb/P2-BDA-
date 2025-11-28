@@ -2,8 +2,11 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError, ArgumentError
-import pandas as pd
 from sqlalchemy import text, inspect
+from pathlib import Path
+import pandas as pd
+import os
+import re
 
 def get_engine():
     """
@@ -25,7 +28,6 @@ def get_engine():
     )
 
     return create_engine(DATABASE_URL)
-
 
 def get_session():
     """
@@ -161,3 +163,151 @@ def get_schema_metadata(session, schema_name='analytics', csv_output_path='tabel
     except Exception as e:
         print(f"Erro crítico ao gerar metadados: {e}")
         return pd.DataFrame()
+
+def execute_pipeline_script(sql_file_path):
+    """
+    Lê um arquivo .sql, separa os comandos e executa no banco.
+    Se encontrar um comando COPY, executa via 'copy_expert' (client-side) para contornar
+    permissões de leitura de arquivo no servidor (nuvem).
+    """
+    path = Path(sql_file_path)
+    if not path.exists():
+        print(f"[ERRO] Arquivo não encontrado: {path}")
+        return
+
+    print(f"--- Processando script: {path.name} ---")
+
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            raw_content = f.read()
+    except Exception as e:
+        print(f"[ERRO] Falha ao ler arquivo: {e}")
+        return
+
+    # 1. Separa os comandos por ponto e vírgula (;)
+    # Remove comentários SQL para evitar erros de split
+    content_clean = re.sub(r'--.*', '', raw_content) 
+    commands = [cmd.strip() for cmd in content_clean.split(';') if cmd.strip()]
+
+    # Precisamos da conexão 'raw' do psycopg2 para rodar o copy_expert
+    engine = get_engine()
+    # Usamos uma conexão direta aqui para ter controle granular
+    connection = engine.raw_connection()
+    cursor = connection.cursor()
+
+    try:
+        print(f"--- Iniciando execução de {len(commands)} bloco(s) ---")
+        
+        for i, cmd in enumerate(commands, 1):
+            
+            # Verifica se é um comando COPY (case insensitive)
+            if cmd.upper().startswith('COPY'):
+                print(f"Executando comando {i} (COPY especial)...")
+                
+                # Regex para extrair: Tabela e Caminho do arquivo
+                # Procura por: COPY tabela FROM 'caminho' ...
+                match = re.search(r"COPY\s+([\w\.]+)\s+FROM\s+'([^']+)'", cmd, re.IGNORECASE)
+                
+                if match:
+                    table_name = match.group(1)
+                    file_path_str = match.group(2)
+                    
+                    # Resolve o caminho do CSV relativo ao script SQL
+                    csv_full_path = path.parent / file_path_str
+                    
+                    # Reconstrói o comando SQL substituindo o caminho por STDIN
+                    # Mantém o restante das opções (WITH, DELIMITER, etc)
+                    sql_copy_stdin = re.sub(r"FROM\s+'[^']+'", "FROM STDIN", cmd, flags=re.IGNORECASE)
+                    
+                    if not csv_full_path.exists():
+                         raise FileNotFoundError(f"CSV não encontrado: {csv_full_path}")
+
+                    with open(csv_full_path, 'r', encoding='utf-8') as f_csv:
+                        cursor.copy_expert(sql_copy_stdin, f_csv)
+                        print(f"  -> Carga de '{file_path_str}' em '{table_name}' concluída.")
+                else:
+                    # Se não casar com o padrão esperado, tenta rodar como está (arriscado na nuvem)
+                    cursor.execute(cmd)
+
+            else:
+                # Comandos normais (CREATE, DROP, INSERT, etc.)
+                # print(f"Executando comando {i} (SQL Padrão)...")
+                cursor.execute(cmd)
+
+        # Se tudo der certo, commita
+        connection.commit()
+        print(f"--- [SUCESSO] Script '{path.name}' finalizado com sucesso. ---")
+
+    except Exception as e:
+        connection.rollback()
+        print(f"--- [FALHA] Erro na execução. Rollback realizado. ---")
+        print(f"Erro detalhado: {e}")
+        
+    finally:
+        cursor.close()
+        connection.close()
+
+def execute_query_script(sql_file_path):
+    """
+    Lê um arquivo .sql contendo consultas (SELECTs), limpa comentários,
+    executa cada uma e exibe o resultado formatado via Pandas.
+    """
+    path = Path(sql_file_path)
+    
+    if not path.exists():
+        print(f"❌ Arquivo não encontrado: {path}")
+        return
+
+    print(f"\n--- 🔍 Iniciando Validação: {path.name} ---")
+    
+    session = get_session()
+    
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            sql_content = f.read()
+
+        # 1. Remove comentários de bloco /* ... */
+        sql_content = re.sub(r'/\*.*?\*/', '', sql_content, flags=re.DOTALL)
+
+        # 2. Separa por ponto e vírgula
+        commands = sql_content.split(';')
+
+        count = 0
+        for cmd in commands:
+            # 3. Limpeza inteligente de linhas
+            # Quebra o comando em linhas e remove aquelas que começam com --
+            lines = [line for line in cmd.split('\n') if not line.strip().startswith('--')]
+            cmd_clean = '\n'.join(lines).strip()
+            
+            # Ignora comandos vazios após a limpeza
+            if not cmd_clean:
+                continue
+            
+            # 4. Verifica se é um comando de leitura válido
+            if not (cmd_clean.upper().startswith('SELECT') or cmd_clean.upper().startswith('WITH')):
+                continue
+
+            count += 1
+            print(f"\n📊 Consulta #{count}:")
+            
+            try:
+                # Executa o comando limpo
+                df = pd.read_sql(sql=text(cmd_clean), con=session.bind)
+                
+                if df.empty:
+                    print("[A consulta não retornou registros]")
+                else:
+                    # Imprime formatado (sem índice numérico)
+                    print(df.to_string(index=False)) 
+                    
+            except Exception as e:
+                print(f"⚠️ Erro ao executar a consulta #{count}:")
+                print(f"Detalhe: {e}")
+
+        print(f"\n--- ✅ Validação Concluída. {count} consultas executadas. ---")
+
+    except Exception as e:
+        print(f"❌ Erro crítico ao processar o arquivo: {e}")
+    
+    finally:
+        session.close()
