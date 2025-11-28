@@ -106,7 +106,3 @@ Navegue até a pasta `notebooks/` e execute os arquivos na seguinte ordem:
   * **Andre Oliveira** - [GitHub](https://github.com/aso1976)
   * **Carlos de Rezende** - [GitHub](https://github.com/rezendedsc)
   * **Matheus Mendonça** - [GitHub](https://github.com/RockMatalacth)
-
------
-```
-```
