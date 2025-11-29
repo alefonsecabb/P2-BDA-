@@ -28,7 +28,7 @@ projeto-dw-grupo-A/
 ├── src/                        # Módulos auxiliares Python
 │   ├── connection.py           # Gerenciador de conexão PostgreSQL
 │   ├── graphics.py             # Funções de plotagem
-│   └── util.py                 # Utilitários gerais
+│   └── useful.py               # Utilitários gerais
 └── visualizations/             # Pasta de saída para imagens dos gráficos (.png)
 ````
 
